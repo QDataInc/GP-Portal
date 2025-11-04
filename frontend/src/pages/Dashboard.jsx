@@ -41,7 +41,7 @@ export default function Dashboard() {
             Updates <ArrowRight size={16} />
           </a>
           <div className="bg-gray-200 text-gray-800 px-3 py-1 rounded-full font-semibold">
-            JP
+            AK
           </div>
         </div>
       </div>
