@@ -1,13 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.routers import investments  # 👈 import router
 
-# Create FastAPI app
 app = FastAPI(title="GP Portal API", version="1.0")
 
-# Allow your React frontend to call this backend
 origins = [
-    "http://localhost:5173",        # local frontend
-    "https://gp-portal.vercel.app"  # production (optional for later)
+    "http://localhost:5173",
+   ## "https://gp-portal.vercel.app"
 ]
 
 app.add_middleware(
@@ -18,7 +17,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Simple test route
+# Include router
+app.include_router(investments.router)
+
 @app.get("/")
 def root():
     return {"message": "Backend is running successfully!"}
