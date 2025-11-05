@@ -1,40 +1,34 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
+from app.models.investment_model import Investment
+from app.services.database import get_db
 
-router = APIRouter(
-    prefix="/api/investments",
-    tags=["Investments"]
-)
+router = APIRouter(prefix="/api/investments", tags=["Investments"])
 
-# ---- Data model ----
-class Investment(BaseModel):
+class InvestmentSchema(BaseModel):
     id: int
     deal_name: str
     investment_total: float
     distribution_total: float
     status: str
 
+    class Config:
+        from_attributes = True
 
-# ---- Fake DB (temporary) ----
-investments_db: List[Investment] = [
-    Investment(id=1, deal_name="Irving Oaks", investment_total=300000, distribution_total=27048.30, status="Active"),
-    Investment(id=2, deal_name="Victory Fund", investment_total=500000, distribution_total=120000.00, status="Closed")
-]
+@router.get("/", response_model=List[InvestmentSchema])
+def get_investments(db: Session = Depends(get_db)):
+    return db.query(Investment).all()
 
+@router.post("/", response_model=InvestmentSchema)
+def add_investment(investment: InvestmentSchema, db: Session = Depends(get_db)):
+    existing = db.query(Investment).filter(Investment.id == investment.id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Investment ID already exists")
 
-# ---- GET all investments ----
-@router.get("/", response_model=List[Investment])
-def get_investments():
-    return investments_db
-
-
-# ---- POST create new investment ----
-@router.post("/", response_model=Investment)
-def add_investment(investment: Investment):
-    # check duplicate id
-    for inv in investments_db:
-        if inv.id == investment.id:
-            raise HTTPException(status_code=400, detail="Investment ID already exists")
-    investments_db.append(investment)
-    return investment
+    db_investment = Investment(**investment.dict())
+    db.add(db_investment)
+    db.commit()
+    db.refresh(db_investment)
+    return db_investment

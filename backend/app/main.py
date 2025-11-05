@@ -1,14 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import investments  # 👈 import router
+from app.services.database import Base, engine
+from app.models import investment_model
+from app.routers import investments
+from app.routers import documents
+from app.models import document_model
 
 app = FastAPI(title="GP Portal API", version="1.0")
 
-origins = [
-    "http://localhost:5173",
-   ## "https://gp-portal.vercel.app"
-]
+Base.metadata.create_all(bind=engine)
 
+origins = ["http://localhost:5173", "https://gp-portal.vercel.app"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -17,8 +19,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include router
 app.include_router(investments.router)
+app.include_router(documents.router)
+
 
 @app.get("/")
 def root():
