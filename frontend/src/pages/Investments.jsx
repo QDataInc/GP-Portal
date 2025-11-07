@@ -1,178 +1,293 @@
-import { useState } from "react";
-import { Info, PlusCircle, Download, FileSpreadsheet } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+  Filter,
+  PlusCircle,
+  Download,
+  Search,
+  X,
+  Upload,
+} from "lucide-react";
+import { getInvestments, addInvestment } from "../api/investments";
 
 export default function Investments() {
-  // Example dataset for charts
-  const contributionData = [
-    { name: "Contributions", value: 300000, color: "#2563eb" },
-    { name: "Distributions", value: 60000, color: "#22c55e" },
-  ];
+  const [investments, setInvestments] = useState([]);
+  const [search, setSearch] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState("");
 
-  const fundingData = [
-    { name: "Committed", value: 300000, color: "#2563eb" },
-    { name: "Funded", value: 250000, color: "#22c55e" },
-  ];
+  const [newInvestment, setNewInvestment] = useState({
+    id: "",
+    deal_name: "",
+    investment_total: "",
+    distribution_total: "",
+    status: "Active",
+  });
 
-  const [profile, setProfile] = useState("All profiles");
+  // Fetch all investments
+  const loadInvestments = async () => {
+    try {
+      const data = await getInvestments();
+      setInvestments(data || []);
+    } catch (err) {
+      console.error("Failed to fetch investments", err);
+      setToast("❌ Failed to load investments");
+    }
+  };
+
+  useEffect(() => {
+    loadInvestments();
+  }, []);
+
+  // Handle form submit
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (
+      !newInvestment.id ||
+      !newInvestment.deal_name ||
+      !newInvestment.investment_total
+    ) {
+      setToast("Please fill in all required fields.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await addInvestment({
+        ...newInvestment,
+        investment_total: parseFloat(newInvestment.investment_total),
+        distribution_total: parseFloat(newInvestment.distribution_total || 0),
+      });
+
+      setToast("✅ Investment added successfully");
+      setIsModalOpen(false);
+      setNewInvestment({
+        id: "",
+        deal_name: "",
+        investment_total: "",
+        distribution_total: "",
+        status: "Active",
+      });
+      await loadInvestments();
+    } catch (err) {
+      console.error("Add investment failed", err);
+      setToast("❌ Failed to add investment");
+    } finally {
+      setLoading(false);
+      setTimeout(() => setToast(""), 2500);
+    }
+  };
+
+  // Search filter
+  const filtered = investments.filter((i) => {
+    const q = search.toLowerCase();
+    return (
+      (i.deal_name || "").toLowerCase().includes(q) ||
+      (i.status || "").toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-8">
-      {/* Alert banner */}
-      <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md flex items-start gap-3">
-        <Info size={20} className="mt-0.5 flex-shrink-0" />
-        <p className="text-sm">
-          You also have investments with other GPs. To see all your investments,{" "}
-          <a href="#" className="font-semibold underline hover:text-blue-900">
-            switch to Cash Flow Portal
-          </a>
-          .
-        </p>
+      {toast && (
+        <div className="border rounded-md px-3 py-2 text-sm bg-blue-50 border-blue-200 text-blue-800">
+          {toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800">Investments</h1>
+        <p className="text-gray-500 text-sm mt-1">Manage your active and closed deals.</p>
       </div>
 
-      {/* Profile selector + actions */}
+      {/* Search + Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <select
-          className="border rounded-md px-3 py-2 text-sm text-gray-700 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={profile}
-          onChange={(e) => setProfile(e.target.value)}
-        >
-          <option>All profiles</option>
-          <option>Profile 1</option>
-          <option>Profile 2</option>
-        </select>
-
-        <div className="flex flex-wrap gap-3">
-          <button className="flex items-center gap-2 border border-gray-300 rounded-md px-4 py-2 text-sm hover:bg-gray-50">
-            <PlusCircle size={16} /> Add investment
-          </button>
-          <button className="flex items-center gap-2 border border-gray-300 rounded-md px-4 py-2 text-sm hover:bg-gray-50">
-            <Download size={16} /> Export report
-          </button>
-          <button className="flex items-center gap-2 border border-gray-300 rounded-md px-4 py-2 text-sm hover:bg-gray-50">
-            <FileSpreadsheet size={16} /> Export SREO
-          </button>
-        </div>
-      </div>
-
-      {/* Active Investments - Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Contributions vs Distributions */}
-        <div className="bg-white border rounded-xl p-6 shadow-sm">
-          <h2 className="font-semibold text-gray-800 mb-4">Active investments</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart
-              data={contributionData}
-              layout="vertical"
-              margin={{ left: 50, right: 30, top: 10, bottom: 10 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                type="number"
-                tickFormatter={(v) => `$${v / 1000}K`}
-                stroke="#9ca3af"
-              />
-              <YAxis
-                dataKey="name"
-                type="category"
-                stroke="#9ca3af"
-                width={100}
-              />
-              <Tooltip
-                formatter={(value) => `$${value.toLocaleString()}`}
-                cursor={{ fill: "#f9fafb" }}
-              />
-              <Bar dataKey="value">
-                {contributionData.map((entry, index) => (
-                  <cell key={`bar-${index}`} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Committed vs Funded */}
-        <div className="bg-white border rounded-xl p-6 shadow-sm">
-          <h2 className="font-semibold text-gray-800 mb-4">Active commitments</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart
-              data={fundingData}
-              layout="vertical"
-              margin={{ left: 50, right: 30, top: 10, bottom: 10 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                type="number"
-                tickFormatter={(v) => `$${v / 1000}K`}
-                stroke="#9ca3af"
-              />
-              <YAxis dataKey="name" type="category" stroke="#9ca3af" width={100} />
-              <Tooltip
-                formatter={(value) => `$${value.toLocaleString()}`}
-                cursor={{ fill: "#f9fafb" }}
-              />
-              <Bar dataKey="value">
-                {fundingData.map((entry, index) => (
-                  <cell key={`bar-${index}`} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Active Investments Table Placeholder */}
-      <div className="bg-white border rounded-xl shadow-sm">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="font-semibold text-gray-800">Active investments</h2>
+        <div className="relative w-full sm:w-72">
+          <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search active investments..."
-            className="border rounded-md px-3 py-1.5 text-sm w-64 focus:ring-2 focus:ring-blue-500"
+            placeholder="Search investments..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full border rounded-md pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm text-gray-700">
-            <thead className="bg-gray-50 border-b text-gray-500 uppercase text-xs">
-              <tr>
-                <th className="px-4 py-3 text-left">Investment name</th>
-                <th className="px-4 py-3 text-left">Offering name</th>
-                <th className="px-4 py-3 text-left">Investment profile</th>
-                <th className="px-4 py-3 text-left">Invested amount</th>
-                <th className="px-4 py-3 text-left">Distributed amount</th>
-                <th className="px-4 py-3 text-left">Capital balance</th>
-                <th className="px-4 py-3 text-left">Current valuation</th>
-                <th className="px-4 py-3 text-left">Deal close date</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Action required</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b hover:bg-gray-50">
-                <td className="px-4 py-3">Fund Alpha</td>
-                <td className="px-4 py-3">Alpha Capital Partners</td>
-                <td className="px-4 py-3">Individual</td>
-                <td className="px-4 py-3">$150,000</td>
-                <td className="px-4 py-3">$20,000</td>
-                <td className="px-4 py-3">$130,000</td>
-                <td className="px-4 py-3">$180,000</td>
-                <td className="px-4 py-3">06/2025</td>
-                <td className="px-4 py-3">Active</td>
-                <td className="px-4 py-3 text-blue-600">None</td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="flex flex-wrap gap-3">
+          <button className="flex items-center gap-2 border rounded-md px-4 py-2 text-sm hover:bg-gray-50">
+            <Filter size={16} /> Filters
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 border rounded-md px-4 py-2 text-sm hover:bg-gray-50"
+          >
+            <PlusCircle size={16} /> Add Investment
+          </button>
         </div>
       </div>
+
+      {/* Table */}
+      <div className="bg-white border rounded-xl shadow-sm overflow-x-auto">
+        <table className="min-w-full text-sm text-gray-700">
+          <thead className="bg-gray-50 border-b text-gray-500 uppercase text-xs">
+            <tr>
+              <th className="px-4 py-3 text-left">ID</th>
+              <th className="px-4 py-3 text-left">Deal name</th>
+              <th className="px-4 py-3 text-left">Investment total</th>
+              <th className="px-4 py-3 text-left">Distribution total</th>
+              <th className="px-4 py-3 text-left">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((inv) => (
+              <tr key={inv.id} className="border-b hover:bg-gray-50">
+                <td className="px-4 py-3">{inv.id}</td>
+                <td className="px-4 py-3">{inv.deal_name}</td>
+                <td className="px-4 py-3">${inv.investment_total?.toLocaleString()}</td>
+                <td className="px-4 py-3">${inv.distribution_total?.toLocaleString()}</td>
+                <td className="px-4 py-3">{inv.status}</td>
+              </tr>
+            ))}
+
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-gray-500 text-center">
+                  No investments found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add Investment Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 relative">
+            <button
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-3 right-3 p-2 hover:bg-gray-100 rounded-full"
+            >
+              <X size={18} />
+            </button>
+
+            <h2 className="text-lg font-semibold mb-4 text-gray-800">
+              Add New Investment
+            </h2>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Investment ID
+                </label>
+                <input
+                  type="number"
+                  value={newInvestment.id}
+                  onChange={(e) =>
+                    setNewInvestment({ ...newInvestment, id: e.target.value })
+                  }
+                  className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Deal Name
+                </label>
+                <input
+                  type="text"
+                  value={newInvestment.deal_name}
+                  onChange={(e) =>
+                    setNewInvestment({
+                      ...newInvestment,
+                      deal_name: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Investment Total ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newInvestment.investment_total}
+                  onChange={(e) =>
+                    setNewInvestment({
+                      ...newInvestment,
+                      investment_total: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Distribution Total ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newInvestment.distribution_total}
+                  onChange={(e) =>
+                    setNewInvestment({
+                      ...newInvestment,
+                      distribution_total: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={newInvestment.status}
+                  onChange={(e) =>
+                    setNewInvestment({
+                      ...newInvestment,
+                      status: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                >
+                  <option>Active</option>
+                  <option>Closed</option>
+                  <option>Pending</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm border rounded-md hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
+                >
+                  <Upload size={14} className="inline-block mr-1" />
+                  {loading ? "Saving..." : "Add Investment"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
