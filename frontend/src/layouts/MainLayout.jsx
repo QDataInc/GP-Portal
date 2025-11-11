@@ -8,6 +8,12 @@ export default function MainLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false); // desktop collapse
   const toggle = () => setOpen(!open);
 
+  // ✅ Logout logic
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
@@ -18,13 +24,24 @@ export default function MainLayout({ children }) {
         setCollapsed={setCollapsed}
       />
 
-      {/* Main area shifts based on sidebar width */}
+      {/* Main area */}
       <div
         className={`flex flex-col flex-1 transition-all duration-300 ${
           collapsed ? "lg:ml-20" : "lg:ml-64"
         }`}
       >
-        <Header toggle={toggle} />
+        {/* Header + Logout */}
+        <div className="flex justify-between items-center px-6 py-4 bg-white border-b shadow-sm">
+          <Header toggle={toggle} />
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition"
+          >
+            Logout
+          </button>
+        </div>
+
+        {/* Page content */}
         <main className="flex-1 p-6 bg-gray-50 min-h-screen">{children}</main>
         <Footer />
       </div>
