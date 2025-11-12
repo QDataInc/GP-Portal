@@ -8,11 +8,10 @@ from fastapi.security import OAuth2PasswordBearer
 from app.services.database import get_db
 from app.models.user_model import User
 
-
 # --------------------------------------------------------------------
 # Configuration
 # --------------------------------------------------------------------
-SECRET_KEY = "supersecretkey"  # ⚠️ Move to environment variable later
+SECRET_KEY = "supersecretkey"  # ⚠️ Move to environment variable in production
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -115,8 +114,14 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 def login(user: UserLogin, db: Session = Depends(get_db)):
     """Authenticate user and return JWT token."""
     db_user = db.query(User).filter(User.email == user.email).first()
-    if not db_user or not verify_password(user.password, db_user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # ✅ Return 404 if email not registered
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Email not found. Please register one.")
+
+    # ✅ Return 401 if password is incorrect
+    if not verify_password(user.password, db_user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect password")
 
     access_token = create_access_token(data={"sub": db_user.email})
     return {
