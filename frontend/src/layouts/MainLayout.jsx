@@ -2,17 +2,16 @@ import { useState } from "react";
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
 import Footer from "../components/Footer";
+import { useAuth } from "../context/AuthContext";
 
 export default function MainLayout({ children }) {
-  const [open, setOpen] = useState(false);        // mobile sidebar
+  const [open, setOpen] = useState(false);          // mobile sidebar
   const [collapsed, setCollapsed] = useState(false); // desktop collapse
+  const { logout, isAuthenticated } = useAuth();
+
   const toggle = () => setOpen(!open);
 
-  // ✅ Logout logic
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-  };
+  if (!isAuthenticated) return null; // prevent flash of layout when logged out
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -33,12 +32,14 @@ export default function MainLayout({ children }) {
         {/* Header + Logout */}
         <div className="flex justify-between items-center px-6 py-4 bg-white border-b shadow-sm">
           <Header toggle={toggle} />
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition"
-          >
-            Logout
-          </button>
+          {isAuthenticated && (
+            <button
+              onClick={logout}
+              className="px-4 py-2 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition"
+            >
+              Logout
+            </button>
+          )}
         </div>
 
         {/* Page content */}

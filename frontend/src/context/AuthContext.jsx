@@ -15,7 +15,12 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (first_name, last_name, email, password) => {
-    await axiosClient.post("/api/auth/register", { first_name, last_name, email, password });
+    await axiosClient.post("/api/auth/register", {
+      first_name,
+      last_name,
+      email,
+      password,
+    });
     await login(email, password);
   };
 
@@ -30,12 +35,34 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       await axiosClient.post("/api/auth/logout");
-    } catch (_) {}
+    } catch (_) {
+      // ignore backend logout errors
+    }
+
+    // ✅ Clear session and reset state
     sessionStorage.clear();
     setToken(null);
     setUser(null);
-    window.location.href = "/auth/start";
+
+    // ✅ Force full reload to modal (prevents stale routes)
+    window.location.replace("/auth/start");
   };
+
+  // ✅ Optional: Bootstrap user info if needed (token already exists)
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (token && !user) {
+        try {
+          const res = await axiosClient.get("/api/auth/me");
+          setUser(res.data);
+        } catch {
+          sessionStorage.clear();
+          setToken(null);
+        }
+      }
+    };
+    fetchUser();
+  }, [token]);
 
   const value = {
     token,
