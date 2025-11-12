@@ -9,16 +9,19 @@ export default function EmailGateModal() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // ---------------------------------------------------------
+  // Handle Continue button
+  // ---------------------------------------------------------
   const handleContinue = async (e) => {
     e.preventDefault();
     setError("");
 
     if (!email.trim()) {
-      setError("Please enter your email");
+      setError("Please enter your email address");
       return;
     }
 
-    const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setError("Please enter a valid email address");
       return;
@@ -30,27 +33,34 @@ export default function EmailGateModal() {
       setLoading(false);
 
       if (exists) {
+        // ✅ Existing user → go to Sign In
         navigate(`/auth/signin?email=${encodeURIComponent(email)}`);
       } else {
-        // ✅ clear email before navigating so Register starts blank
-        setEmail("");
-        navigate("/auth/register", { replace: true });
+        // ✅ New user → show message, don’t redirect automatically
+        setError("Email not found. Please register one.");
       }
-    } catch {
+    } catch (err) {
+      console.error(err);
       setLoading(false);
       setError("Server error. Please try again.");
     }
   };
 
+  // ---------------------------------------------------------
+  // Handle "Create one" link → clean state, open register page
+  // ---------------------------------------------------------
   const handleCreateAccount = () => {
-    // ✅ fully reset any stored email and URL before routing
     setEmail("");
+    setError("");
     const cleanUrl = new URL(window.location.href);
     cleanUrl.search = "";
     window.history.replaceState({}, "", cleanUrl.toString());
     navigate("/auth/register", { replace: true });
   };
 
+  // ---------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------
   return (
     <div
       role="dialog"
@@ -77,16 +87,21 @@ export default function EmailGateModal() {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError("");
+              }}
               placeholder="you@example.com"
+              autoComplete="username"
               disabled={loading}
               autoFocus
               className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
             />
           </div>
 
+          {/* ✅ Show error messages below input */}
           {error && (
-            <p className="text-red-400 text-sm text-center -mt-3">{error}</p>
+            <p className="text-red-400 text-sm text-center -mt-2">{error}</p>
           )}
 
           <button

@@ -1,15 +1,37 @@
+// /src/pages/auth/Signin.jsx
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
 
 export default function Signin() {
   const { login } = useAuth();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState(searchParams.get("email") || "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // ✅ Allowed real-world email domains
+  const allowedDomains = [
+    "gmail.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+    "microsoft.com",
+    "icloud.com",
+    "protonmail.com",
+  ];
+
+  // ✅ Validate email format and domain
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return false;
+    const domain = email.split("@")[1].toLowerCase();
+    return allowedDomains.includes(domain);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,13 +42,28 @@ export default function Signin() {
       return;
     }
 
+    // ✅ validate email before sending request
+    if (!validateEmail(email)) {
+      setError(
+        "Please enter a valid email (e.g. user@gmail.com, user@outlook.com, user@yahoo.com)."
+      );
+      return;
+    }
+
     try {
       setLoading(true);
       await login(email, password);
       navigate("/dashboard");
-    } catch {
+    } catch (err) {
       setLoading(false);
-      setError("Invalid email or password");
+
+      if (err.response?.status === 404) {
+        setError("Email not found. Please register one.");
+      } else if (err.response?.status === 401) {
+        setError("Incorrect password. Please try again.");
+      } else {
+        setError("Login failed. Please try again later.");
+      }
     }
   };
 
@@ -39,32 +76,47 @@ export default function Signin() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Email field */}
           <div>
             <label className="block text-sm text-gray-400 mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder="you@gmail.com"
+              autoComplete="username"
               className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
             />
           </div>
 
-          <div>
+          {/* Password field with toggle */}
+          <div className="relative">
             <label className="block text-sm text-gray-400 mb-1">Password</label>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
+              autoComplete="current-password"
+              className="w-full border border-gray-600 rounded-lg px-3 py-2 pr-10 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-[34px] text-gray-400 hover:text-white"
+            >
+              {showPassword ? (
+                <AiOutlineEyeInvisible size={20} />
+              ) : (
+                <AiOutlineEye size={20} />
+              )}
+            </button>
           </div>
 
-          {error && (
-            <p className="text-red-400 text-sm text-center -mt-3">{error}</p>
-          )}
+          {/* Error messages */}
+          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
+          {/* Submit button */}
           <button
             type="submit"
             disabled={loading}
@@ -77,12 +129,12 @@ export default function Signin() {
             {loading ? "Signing in..." : "Sign In"}
           </button>
 
+          {/* Navigation links */}
           <div className="text-center text-sm text-gray-400">
             Don’t have an account?{" "}
             <button
               type="button"
               onClick={() => {
-                // ✅ Reset email when going to Register
                 setEmail("");
                 navigate("/auth/register");
               }}
@@ -96,7 +148,6 @@ export default function Signin() {
             <button
               type="button"
               onClick={() => {
-                // ✅ Reset everything on Back
                 setEmail("");
                 setPassword("");
                 navigate("/auth/start");
