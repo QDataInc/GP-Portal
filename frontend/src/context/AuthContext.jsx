@@ -1,3 +1,4 @@
+// /src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
 import axiosClient from "../api/axiosClient";
 
@@ -8,12 +9,13 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const isAuthenticated = !!token;
 
-  // --- API methods ---
+  // ✅ Check if email exists
   const checkEmail = async (email) => {
     const res = await axiosClient.post("/api/auth/check-email", { email });
     return res.data.exists;
   };
 
+  // ✅ Register then login
   const register = async (first_name, last_name, email, password) => {
     await axiosClient.post("/api/auth/register", {
       first_name,
@@ -24,31 +26,30 @@ export function AuthProvider({ children }) {
     await login(email, password);
   };
 
+  // ✅ Login and save token
   const login = async (email, password) => {
     const res = await axiosClient.post("/api/auth/login", { email, password });
+
     const { access_token, user } = res.data;
+    if (!access_token) throw new Error("Token missing in login response");
+
     sessionStorage.setItem("token", access_token);
     setToken(access_token);
     setUser(user);
   };
 
+  // ✅ Logout and clear session
   const logout = async () => {
     try {
       await axiosClient.post("/api/auth/logout");
-    } catch (_) {
-      // ignore backend logout errors
-    }
-
-    // ✅ Clear session and reset state
+    } catch (_) {}
     sessionStorage.clear();
     setToken(null);
     setUser(null);
-
-    // ✅ Force full reload to modal (prevents stale routes)
     window.location.replace("/auth/start");
   };
 
-  // ✅ Optional: Bootstrap user info if needed (token already exists)
+  // ✅ Bootstrap user info on refresh (optional)
   useEffect(() => {
     const fetchUser = async () => {
       if (token && !user) {
@@ -69,8 +70,8 @@ export function AuthProvider({ children }) {
     user,
     isAuthenticated,
     checkEmail,
-    login,
     register,
+    login,
     logout,
   };
 

@@ -62,7 +62,6 @@ export default function Register() {
     Object.values(validations).forEach((regex) => {
       if (regex.test(password)) score++;
     });
-
     if (score <= 2) return "Weak";
     if (score === 3 || score === 4) return "Medium";
     return "Strong";
@@ -126,7 +125,10 @@ export default function Register() {
     } catch (err) {
       setLoading(false);
       if (err?.response?.status === 409) {
-        navigate(`/auth/signin?email=${encodeURIComponent(email)}`);
+        setError("This email is already registered. Redirecting to Sign In...");
+        setTimeout(() => {
+          navigate(`/auth/signin?email=${encodeURIComponent(email)}`);
+        }, 1800);
         return;
       }
       setError("Registration failed. Please try again.");

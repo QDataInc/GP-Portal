@@ -1,21 +1,20 @@
-import axios from "axios";
+// /src/api/investments.js
+import axiosClient from "./axiosClient";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+// ✅ Get all investments
+export const getInvestments = async () => {
+  const res = await axiosClient.get("/api/investments");
+  return res.data;
+};
 
-/**
- * Fetch all investments
- */
-export async function getInvestments() {
-  const response = await axios.get(`${API_BASE}/api/investments`);
-  return response.data;
-}
+// ✅ Add new investment
+export const addInvestment = async (investment) => {
+  const res = await axiosClient.post("/api/investments", investment);
+  return res.data;
+};
 
-/**
- * Add a new investment record
- */
-export async function addInvestment(data) {
-  const response = await axios.post(`${API_BASE}/api/investments`, data, {
-    headers: { "Content-Type": "application/json" },
-  });
-  return response.data;
-}
+// ✅ Delete investment (optional)
+export const deleteInvestment = async (id) => {
+  const res = await axiosClient.delete(`/api/investments/${id}`);
+  return res.data;
+};
