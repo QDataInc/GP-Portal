@@ -4,78 +4,109 @@ import axiosClient from "../api/axiosClient";
 
 const AuthContext = createContext();
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
+  // Store JWT token
   const [token, setToken] = useState(sessionStorage.getItem("token"));
   const [user, setUser] = useState(null);
+
   const isAuthenticated = !!token;
 
-  // ✅ Check if email exists
-  const checkEmail = async (email) => {
-    const res = await axiosClient.post("/api/auth/check-email", { email });
-    return res.data.exists;
+  // ---------------------------------------------------------
+  // SAVE JWT INTO SESSION STORAGE
+  // ---------------------------------------------------------
+  const loginWithToken = (jwtToken) => {
+    sessionStorage.setItem("token", jwtToken);
+    setToken(jwtToken);
   };
 
-  // ✅ Register then login
-  const register = async (first_name, last_name, email, password) => {
-    await axiosClient.post("/api/auth/register", {
-      first_name,
-      last_name,
+  const logout = () => {
+    sessionStorage.removeItem("token");
+    setToken(null);
+    setUser(null);
+    window.location.href = "/auth/start";
+  };
+
+  // ---------------------------------------------------------
+  // LOAD USER PROFILE (OPTIONAL: only if backend supports it)
+  // ---------------------------------------------------------
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!token) return;
+
+      try {
+        const res = await axiosClient.get("/api/profiles/me");
+        setUser(res.data);
+      } catch (err) {
+        console.log("Profile load failed or token expired.");
+      }
+    };
+
+    loadProfile();
+  }, [token]);
+
+  // ---------------------------------------------------------
+  // AUTH HELPERS FOR OTP FLOW
+  // ---------------------------------------------------------
+
+  // 1) Check if email exists (Start page)
+  const checkEmail = async (email) => {
+    const res = await axiosClient.post("/api/auth/login-init", { email });
+    return res.data.exists; // true/false
+  };
+
+  // 2) Validate password → triggers OTP sending
+  const sendPassword = async (email, password) => {
+    const res = await axiosClient.post("/api/auth/login-init", {
       email,
       password,
     });
-    await login(email, password);
+
+    return res.data; // expect { message: "OTP sent" }
   };
 
-  // ✅ Login and save token
-  const login = async (email, password) => {
-    const res = await axiosClient.post("/api/auth/login", { email, password });
+  // 3) Verify OTP → returns JWT token
+  const verifyOtp = async (email, otp) => {
+    const res = await axiosClient.post("/api/auth/login-verify-otp", {
+      email,
+      otp,
+    });
 
-    const { access_token, user } = res.data;
-    if (!access_token) throw new Error("Token missing in login response");
+    const jwt = res.data?.access_token;
+    if (jwt) loginWithToken(jwt);
 
-    sessionStorage.setItem("token", access_token);
-    setToken(access_token);
-    setUser(user);
+    return jwt;
   };
 
-  // ✅ Logout and clear session
-  const logout = async () => {
-    try {
-      await axiosClient.post("/api/auth/logout");
-    } catch (_) {}
-    sessionStorage.clear();
-    setToken(null);
-    setUser(null);
-    window.location.replace("/auth/start");
+  // ---------------------------------------------------------
+  // 4) Register user (first/last/email/password)
+  // ---------------------------------------------------------
+  const registerUser = async (payload) => {
+    const res = await axiosClient.post("/api/auth/register", payload);
+    return res.data;
   };
 
-  // ✅ Bootstrap user info on refresh (optional)
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (token && !user) {
-        try {
-          const res = await axiosClient.get("/api/auth/me");
-          setUser(res.data);
-        } catch {
-          sessionStorage.clear();
-          setToken(null);
-        }
-      }
-    };
-    fetchUser();
-  }, [token]);
+  // ---------------------------------------------------------
+  // EXPORT EVERYTHING
+  // ---------------------------------------------------------
+  return (
+    <AuthContext.Provider
+      value={{
+        token,
+        user,
+        isAuthenticated,
+        loginWithToken,
+        logout,
 
-  const value = {
-    token,
-    user,
-    isAuthenticated,
-    checkEmail,
-    register,
-    login,
-    logout,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
+        // NEW OTP FLOW HELPERS
+        checkEmail,
+        sendPassword,
+        verifyOtp,
+        registerUser,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
 
 export const useAuth = () => useContext(AuthContext);

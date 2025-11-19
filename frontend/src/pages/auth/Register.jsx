@@ -1,338 +1,223 @@
 // /src/pages/auth/Register.jsx
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import axiosClient from "../../api/axiosClient";
 import { AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
-import { FaCheckCircle, FaTimesCircle } from "react-icons/fa";
 
 export default function Register() {
-  const { register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
 
-  const [form, setForm] = useState({
-    first_name: "",
-    last_name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  // Prefill but allow editing
+  const initialEmail = queryParams.get("email") || "";
 
-  // 👁️ Toggles for visibility
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState(initialEmail);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // ✅ Password strength info
-  const [strength, setStrength] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // ✅ clear stray ?email=
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (url.search) {
-      url.search = "";
-      window.history.replaceState({}, "", url.toString());
-    }
-  }, []);
+  // Email validation
+  const validateEmail = (email) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  // ✅ Allowed domains
-  const allowedDomains = [
-    "gmail.com",
-    "yahoo.com",
-    "outlook.com",
-    "hotmail.com",
-    "microsoft.com",
-    "icloud.com",
-    "protonmail.com",
-  ];
-
-  // ✅ Regex patterns
-  const validations = {
-    length: /.{8,}/,
-    uppercase: /[A-Z]/,
-    lowercase: /[a-z]/,
-    number: /\d/,
-    special: /[@$!%*?&]/,
+  // Password validations
+  const checks = {
+    length: password.length >= 8,
+    upper: /[A-Z]/.test(password),
+    lower: /[a-z]/.test(password),
+    number: /\d/.test(password),
+    special: /[!@#$%^&*(),.?":{}|<>]/.test(password),
   };
 
-  // ✅ Password strength label
-  const evaluateStrength = (password) => {
-    if (!password) return "";
-    let score = 0;
-    Object.values(validations).forEach((regex) => {
-      if (regex.test(password)) score++;
-    });
-    if (score <= 2) return "Weak";
-    if (score === 3 || score === 4) return "Medium";
-    return "Strong";
-  };
+  const allValid =
+    checks.length &&
+    checks.upper &&
+    checks.lower &&
+    checks.number &&
+    checks.special &&
+    password === confirmPassword;
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-    if (name === "password") {
-      setStrength(evaluateStrength(value));
-    }
-  };
-
-  const handleSubmit = async (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
 
-    const { first_name, last_name, email, password, confirmPassword } = form;
-
-    if (!first_name || !last_name || !email || !password || !confirmPassword) {
-      setError("All fields are required");
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("Please enter your first and last name.");
       return;
     }
 
-    // ✅ Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address (e.g. user@gmail.com).");
-      return;
-    }
-    const domain = email.split("@")[1].toLowerCase();
-    if (!allowedDomains.includes(domain)) {
-      setError(
-        "Please register using a valid email provider like Gmail, Yahoo, Outlook, or Microsoft."
-      );
+    if (!validateEmail(email)) {
+      setError("Please enter a valid email address.");
       return;
     }
 
-    // ✅ Password validation
-    const isStrong =
-      validations.length.test(password) &&
-      validations.uppercase.test(password) &&
-      validations.lowercase.test(password) &&
-      validations.number.test(password) &&
-      validations.special.test(password);
-
-    if (!isStrong) {
-      setError("Password must meet all the required conditions below.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    if (!allValid) {
+      setError("Password does not meet requirements.");
       return;
     }
 
     try {
       setLoading(true);
-      await register(first_name, last_name, email, password);
-      navigate("/dashboard");
+
+      // REQUIRED BACKEND FORMAT
+      await axiosClient.post("/api/auth/register", {
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        password,
+      });
+
+      navigate(`/auth/password?email=${encodeURIComponent(email)}`);
     } catch (err) {
       setLoading(false);
-      if (err?.response?.status === 409) {
-        setError("This email is already registered. Redirecting to Sign In...");
-        setTimeout(() => {
-          navigate(`/auth/signin?email=${encodeURIComponent(email)}`);
-        }, 1800);
+
+      if (err.response?.status === 409) {
+        setError("This email is already registered.");
         return;
       }
-      setError("Registration failed. Please try again.");
-    }
-  };
 
-  const getStrengthColor = (level) => {
-    switch (level) {
-      case "Weak":
-        return "text-red-400";
-      case "Medium":
-        return "text-yellow-400";
-      case "Strong":
-        return "text-green-400";
-      default:
-        return "text-gray-400";
+      setError("Account creation failed. Try again.");
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0f0f1a] to-[#1a1a2e]">
-      <div className="bg-[#111827]/80 backdrop-blur-md text-white rounded-2xl p-10 w-full max-w-md shadow-2xl border border-gray-700">
-        <h1 className="text-2xl font-bold mb-3 text-center">Create Account</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0f0f1a] to-[#1a1a2e] px-4">
+      <div className="bg-[#111827]/80 backdrop-blur-md text-white rounded-2xl p-10 max-w-md w-full shadow-2xl border border-gray-700">
+
+        <h1 className="text-2xl font-bold text-center mb-3">Create Account</h1>
         <p className="text-gray-400 text-sm mb-6 text-center">
           Join the platform and get started today
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* First / Last Name */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">First name</label>
-              <input
-                name="first_name"
-                value={form.first_name}
-                onChange={handleChange}
-                placeholder="John"
-                className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Last name</label>
-              <input
-                name="last_name"
-                value={form.last_name}
-                onChange={handleChange}
-                placeholder="Doe"
-                className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 outline-none"
-              />
-            </div>
-          </div>
+        <form onSubmit={handleRegister} className="space-y-5">
 
-          {/* Email */}
+          {/* First Name */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Email</label>
+            <label className="text-sm text-gray-400 mb-1 block">First name</label>
             <input
-              name="email"
-              type="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="you@gmail.com"
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="John"
               className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 outline-none"
             />
           </div>
 
-          {/* Password */}
-          <div className="relative">
-            <label className="block text-sm text-gray-400 mb-1">Password</label>
+          {/* Last Name */}
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Last name</label>
             <input
-              name="password"
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Doe"
+              className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 outline-none"
+            />
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 outline-none"
+            />
+          </div>
+
+          {/* Password + Visibility */}
+          <div className="relative">
+            <label className="text-sm text-gray-400 mb-1 block">Password</label>
+            <input
               type={showPassword ? "text" : "password"}
-              value={form.password}
-              onChange={handleChange}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               className="w-full border border-gray-600 rounded-lg px-3 py-2 pr-10 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 outline-none"
             />
-            <button
-              type="button"
+            <span
+              className="absolute right-3 top-[38px] text-gray-400 hover:text-white cursor-pointer"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-[34px] text-gray-400 hover:text-white"
             >
               {showPassword ? (
                 <AiOutlineEyeInvisible size={20} />
               ) : (
                 <AiOutlineEye size={20} />
               )}
-            </button>
+            </span>
           </div>
 
-          {/* Password Strength */}
-          {strength && (
-            <p className={`text-sm mt-1 ${getStrengthColor(strength)}`}>
-              Password Strength: {strength}
-            </p>
-          )}
-
-          {/* Password Requirement Checklist */}
-          <div className="mt-3 space-y-1 text-sm">
-            <div className="flex items-center gap-2">
-              {validations.length.test(form.password) ? (
-                <FaCheckCircle className="text-green-400" />
-              ) : (
-                <FaTimesCircle className="text-red-400" />
-              )}
-              <span>At least 8 characters</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {validations.uppercase.test(form.password) ? (
-                <FaCheckCircle className="text-green-400" />
-              ) : (
-                <FaTimesCircle className="text-red-400" />
-              )}
-              <span>At least one uppercase letter</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {validations.lowercase.test(form.password) ? (
-                <FaCheckCircle className="text-green-400" />
-              ) : (
-                <FaTimesCircle className="text-red-400" />
-              )}
-              <span>At least one lowercase letter</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {validations.number.test(form.password) ? (
-                <FaCheckCircle className="text-green-400" />
-              ) : (
-                <FaTimesCircle className="text-red-400" />
-              )}
-              <span>At least one number</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {validations.special.test(form.password) ? (
-                <FaCheckCircle className="text-green-400" />
-              ) : (
-                <FaTimesCircle className="text-red-400" />
-              )}
-              <span>At least one special character (@$!%*?&)</span>
-            </div>
-          </div>
-
-          {/* Confirm Password */}
-          <div className="relative mt-5">
-            <label className="block text-sm text-gray-400 mb-1">Confirm password</label>
+          {/* Confirm Password + Visibility */}
+          <div className="relative">
+            <label className="text-sm text-gray-400 mb-1 block">Confirm password</label>
             <input
-              name="confirmPassword"
               type={showConfirm ? "text" : "password"}
-              value={form.confirmPassword}
-              onChange={handleChange}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="••••••••"
               className="w-full border border-gray-600 rounded-lg px-3 py-2 pr-10 bg-transparent text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 outline-none"
             />
-            <button
-              type="button"
+            <span
+              className="absolute right-3 top-[38px] text-gray-400 hover:text-white cursor-pointer"
               onClick={() => setShowConfirm(!showConfirm)}
-              className="absolute right-3 top-[34px] text-gray-400 hover:text-white"
             >
               {showConfirm ? (
                 <AiOutlineEyeInvisible size={20} />
               ) : (
                 <AiOutlineEye size={20} />
               )}
-            </button>
+            </span>
           </div>
 
+          {/* Password Requirements */}
+          <ul className="text-xs text-gray-400 space-y-1 pl-1">
+            <li className={checks.length ? "text-green-400" : ""}>• At least 8 characters</li>
+            <li className={checks.upper ? "text-green-400" : ""}>• At least one uppercase letter</li>
+            <li className={checks.lower ? "text-green-400" : ""}>• At least one lowercase letter</li>
+            <li className={checks.number ? "text-green-400" : ""}>• At least one number</li>
+            <li className={checks.special ? "text-green-400" : ""}>• At least one special character (!@#$%^&*)</li>
+            <li className={password === confirmPassword && password ? "text-green-400" : ""}>
+              • Passwords match
+            </li>
+          </ul>
+
           {/* Error */}
-          {error && <p className="text-red-400 text-sm text-center mt-2">{error}</p>}
+          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
           {/* Submit */}
           <button
             type="submit"
             disabled={loading}
-            className={`w-full mt-3 py-2 rounded-lg text-white font-semibold transition ${
-              loading
-                ? "bg-violet-400 cursor-not-allowed"
-                : "bg-violet-600 hover:bg-violet-700"
+            className={`w-full py-2 rounded-lg text-white font-semibold transition ${
+              loading ? "bg-violet-400 cursor-not-allowed" : "bg-violet-600 hover:bg-violet-700"
             }`}
           >
             {loading ? "Creating account..." : "Create Account"}
           </button>
 
-          {/* Navigation Links */}
-          <div className="text-center text-sm text-gray-400 mt-3">
-            Already have an account?{" "}
-            <button
-              type="button"
-              onClick={() =>
-                navigate(`/auth/signin?email=${encodeURIComponent(form.email)}`)
-              }
-              className="text-violet-400 hover:text-violet-300 underline"
-            >
-              Sign in
-            </button>
-          </div>
-
-          <div className="text-center text-sm text-gray-500 mt-2">
+          {/* Back */}
+          <div className="text-center text-sm text-gray-500 mt-3">
             <button
               type="button"
               onClick={() => navigate("/auth/start")}
-              className="hover:text-violet-400 underline transition"
+              className="underline hover:text-violet-400"
             >
               Back
             </button>
           </div>
+
         </form>
+
       </div>
     </div>
   );

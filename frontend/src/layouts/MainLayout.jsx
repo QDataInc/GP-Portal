@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { Outlet } from "react-router-dom";   // <-- IMPORTANT
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
 import Footer from "../components/Footer";
 import { useAuth } from "../context/AuthContext";
 
-export default function MainLayout({ children }) {
+export default function MainLayout() {
   const [open, setOpen] = useState(false);          // mobile sidebar
   const [collapsed, setCollapsed] = useState(false); // desktop collapse
   const { logout, isAuthenticated } = useAuth();
@@ -43,7 +44,10 @@ export default function MainLayout({ children }) {
         </div>
 
         {/* Page content */}
-        <main className="flex-1 p-6 bg-gray-50 min-h-screen">{children}</main>
+        <main className="flex-1 p-6 bg-gray-50 min-h-screen">
+          <Outlet />   {/* <-- THIS LOADS dashboard/documents/investments */}
+        </main>
+
         <Footer />
       </div>
     </div>

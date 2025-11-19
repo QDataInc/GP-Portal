@@ -1,27 +1,33 @@
 import { useState } from "react";
-import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [email, setEmail] = useState(searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
+    if (!email || !password) {
+      setError("Please enter both email and password");
+      return;
+    }
+
     try {
-      const res = await axios.post("http://127.0.0.1:8000/api/auth/login", {
-        email,
-        password,
-      });
-      localStorage.setItem("token", res.data.access_token);
-      navigate("/"); // redirect to dashboard after login
+      setLoading(true);
+      await login(email, password);
+      navigate("/dashboard");
     } catch (err) {
       console.error(err);
       setError("Invalid email or password");
+      setLoading(false);
     }
   };
 
@@ -29,7 +35,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white shadow-md rounded-xl p-8 w-full max-w-sm">
         <h1 className="text-2xl font-bold mb-4 text-center text-gray-800">
-          Login
+          Sign In
         </h1>
 
         {error && (
@@ -45,8 +51,10 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              readOnly={!!searchParams.get("email")} // Prefilled email from modal
+              className={`w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 ${
+                searchParams.get("email") ? "bg-gray-100" : ""
+              }`}
             />
           </div>
 
@@ -65,11 +73,22 @@ export default function Login() {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition"
+            disabled={loading}
+            className={`w-full text-white py-2 rounded-md transition ${
+              loading
+                ? "bg-blue-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
           >
-            Sign in
+            {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
+
+        <div className="text-sm text-center text-gray-500 mt-3">
+          <a href="/auth/start" className="text-blue-600 hover:underline">
+            Back
+          </a>
+        </div>
       </div>
     </div>
   );
