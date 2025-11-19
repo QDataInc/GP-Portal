@@ -13,3 +13,6 @@ class Document(Base):
     profile_name = Column(String, nullable=True)
     file_path = Column(String, nullable=False)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+

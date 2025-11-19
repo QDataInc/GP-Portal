@@ -1,42 +1,149 @@
-# /app/routers/auth.py
+# backend/app/routers/auth.py
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.services.database import get_db
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, EmailStr
+from datetime import datetime, timedelta
+from jose import jwt, JWTError
+import random
+
+from app.utils.auth_utils import (
+    verify_password,
+    create_access_token,
+    get_password_hash,
+    SECRET_KEY,
+    ALGORITHM,
+)
+
+from app.utils.email_utils import send_email_otp
 from app.models.user_model import User
-from app.utils import verify_password, create_access_token  # adjust imports
-from datetime import timedelta
+from app.services.database import get_db
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+oauth2_scheme = HTTPBearer()
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+# ----------------------------------------------
+# SCHEMAS
+# ----------------------------------------------
+class UserCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    password: str
+
+class LoginInitRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class LoginVerifyOTP(BaseModel):
+    email: EmailStr
+    otp: str
 
 
-@router.post("/login")
-def login(user_credentials: dict, db: Session = Depends(get_db)):
-    """Authenticate user and return JWT token."""
-    email = user_credentials.get("email")
-    password = user_credentials.get("password")
+# ----------------------------------------------
+# JWT Decode Helper
+# ----------------------------------------------
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)
+):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        return email
+    except:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    db_user = db.query(User).filter(User.email == email).first()
 
-    if not db_user:
-        raise HTTPException(status_code=404, detail="Email not found")
+# ----------------------------------------------
+# REGISTER USER
+# ----------------------------------------------
+@router.post("/register")
+def register(user: UserCreate, db: Session = Depends(get_db)):
+    exists = db.query(User).filter(User.email == user.email).first()
+    if exists:
+        raise HTTPException(status_code=409, detail="Email already registered")
 
-    if not verify_password(password, db_user.password_hash):
-        raise HTTPException(status_code=401, detail="Incorrect password")
+    hashed_pw = get_password_hash(user.password)
 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": db_user.email}, expires_delta=access_token_expires
+    new_user = User(
+        username=f"{user.first_name} {user.last_name}",
+        email=user.email,
+        password_hash=hashed_pw,
+        first_name=user.first_name,
+        last_name=user.last_name,
     )
 
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {"message": "User registered successfully", "email": new_user.email}
+
+
+# ----------------------------------------------
+# STEP 1 → LOGIN INIT (EMAIL + PASSWORD)
+# SENDS OTP TO EMAIL
+# ----------------------------------------------
+@router.post("/login-init")
+def login_init(request: LoginInitRequest, db: Session = Depends(get_db)):
+
+    user = db.query(User).filter(User.email == request.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    if not verify_password(request.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    otp = str(random.randint(100000, 999999))
+
+    user.email_otp_code = otp
+    user.email_otp_expiry = datetime.utcnow() + timedelta(minutes=5)
+    db.commit()
+
+    send_email_otp(user.email, otp)
+
     return {
-        "access_token": access_token,  # ✅ required by frontend
-        "token_type": "bearer",
+        "otp_sent": True,
+        "email": user.email
+    }
+
+
+# ----------------------------------------------
+# STEP 2 → VERIFY OTP
+# ISSUES FINAL ACCESS TOKEN
+# ----------------------------------------------
+@router.post("/login-verify-otp")
+def login_verify_otp(request: LoginVerifyOTP, db: Session = Depends(get_db)):
+
+    user = db.query(User).filter(User.email == request.email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    if not user.email_otp_code:
+        raise HTTPException(status_code=400, detail="OTP not generated")
+
+    if datetime.utcnow() > user.email_otp_expiry:
+        raise HTTPException(status_code=400, detail="OTP expired")
+
+    if request.otp != user.email_otp_code:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    # Clear OTP
+    user.email_otp_code = None
+    user.email_otp_expiry = None
+    db.commit()
+
+    access_token = create_access_token({"sub": user.email})
+
+    return {
+        "access_token": access_token,
         "user": {
-            "id": db_user.id,
-            "email": db_user.email,
-            "name": db_user.username,
-        },
+            "id": user.id,
+            "email": user.email,
+            "name": user.username
+        }
     }

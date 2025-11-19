@@ -1,73 +1,56 @@
 # /app/routers/documents.py
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from datetime import datetime
-import os
 from app.models.document_model import Document
 from app.services.database import get_db
-from app.routers.auth import get_current_user  # ✅ Require JWT for auth
+from app.routers.auth import get_current_user
+
+from azure.storage.blob import BlobServiceClient
+import os
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
-# Directory to store uploaded files
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# --------------------------------------------------------------------
-# Pydantic schema for response serialization
-# --------------------------------------------------------------------
-class DocumentSchema(BaseModel):
-    id: int
-    name: str
-    label: Optional[str] = None
-    deal_name: Optional[str] = None
-    profile_name: Optional[str] = None
-    file_path: str
-    uploaded_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
+# -----------------------------------------------------------
+# 🔒 Azure Blob Storage Settings (USE VALID KEY!)
+# -----------------------------------------------------------
+AZURE_BLOB_CONNECTION_STRING = (
+    "DefaultEndpointsProtocol=https;"
+    "AccountName=gpportal;"
+    "AccountKey=82owS0tGAvaSaQPzuh7XJc44rWBBnzweNAmnpttM7GIDErQYizl6Ln5BAcXBnFbbwdw86ud5jaY++AStN1t9/Q==;"
+    "EndpointSuffix=core.windows.net"
+)
+AZURE_CONTAINER_NAME = "documents"
 
 
-# --------------------------------------------------------------------
-# GET all documents
-# --------------------------------------------------------------------
-@router.get("/", response_model=List[DocumentSchema])
+# -----------------------------------------------------------
+# 📌 GET DOCUMENTS
+# -----------------------------------------------------------
+@router.get("/", response_model=List[dict])
 def get_documents(
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
-    """Return all uploaded documents for the authenticated user."""
     docs = db.query(Document).order_by(Document.uploaded_at.desc()).all()
-    return docs
+    return [
+        {
+            "id": d.id,
+            "name": d.name,
+            "label": d.label,
+            "deal_name": d.deal_name,
+            "profile_name": d.profile_name,
+            "file_path": d.file_path,
+            "uploaded_at": d.uploaded_at,
+        }
+        for d in docs
+    ]
 
 
-# --------------------------------------------------------------------
-# POST - Add document metadata manually (rarely used; upload preferred)
-# --------------------------------------------------------------------
-@router.post("/", response_model=DocumentSchema)
-def add_document(
-    document: DocumentSchema,
-    db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
-):
-    """Add a document entry (metadata only)."""
-    existing = db.query(Document).filter(Document.id == document.id).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Document ID already exists")
-
-    db_document = Document(**document.dict())
-    db.add(db_document)
-    db.commit()
-    db.refresh(db_document)
-    return db_document
-
-
-# --------------------------------------------------------------------
-# POST - Upload PDF document
-# --------------------------------------------------------------------
+# -----------------------------------------------------------
+# 📤 UPLOAD DOCUMENT TO AZURE BLOB STORAGE
+# -----------------------------------------------------------
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -77,46 +60,63 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
-    """Upload a PDF document, save to uploads/, and create DB record."""
-
-    # ✅ 1. Validate file extension
+    # 1️⃣ Validate file type
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
-    # ✅ 2. Avoid overwriting existing files
-    base_name, ext = os.path.splitext(file.filename)
+    # 2️⃣ Connect to Azure Blob Storage
+    blob_service = BlobServiceClient.from_connection_string(AZURE_BLOB_CONNECTION_STRING)
+    container = blob_service.get_container_client(AZURE_CONTAINER_NAME)
+
+    # Ensure container exists
+    try:
+        container.create_container()
+    except Exception:
+        pass  # ignore if exists
+
+    # Debug print (optional)
+    print("Uploading to container:", container.url)
+
+    # 3️⃣ Generate unique blob name
+    blob_name = file.filename
+    base_name, ext = os.path.splitext(blob_name)
+    blob_client = container.get_blob_client(blob_name)
+
     counter = 1
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
-    while os.path.exists(file_path):
-        file_path = os.path.join(UPLOAD_DIR, f"{base_name}_{counter}{ext}")
+    while blob_client.exists():
+        blob_name = f"{base_name}_{counter}{ext}"
+        blob_client = container.get_blob_client(blob_name)
         counter += 1
 
-    # ✅ 3. Save the file to disk
+    # 4️⃣ Upload file → Azure Blob Storage
     try:
         contents = await file.read()
-        with open(file_path, "wb") as f:
-            f.write(contents)
+        blob_client.upload_blob(contents, overwrite=True)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File saving failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Blob upload failed: {str(e)}")
 
-    # ✅ 4. Save metadata to DB
+    # 5️⃣ Create Blob URL
+    blob_url = f"{container.url}/{blob_name}"
+
+    # 6️⃣ Save metadata → Azure SQL
     new_doc = Document(
-        name=os.path.basename(file_path),
+        name=blob_name,
         label=label,
         deal_name=deal_name,
         profile_name=profile_name,
-        file_path=file_path,
+        file_path=blob_url,
         uploaded_at=datetime.utcnow(),
     )
+
     db.add(new_doc)
     db.commit()
     db.refresh(new_doc)
 
-    # ✅ 5. Return response
+    # 7️⃣ Response → Frontend
     return {
         "message": "File uploaded successfully",
-        "document_id": new_doc.id,
+        "id": new_doc.id,
         "file_name": new_doc.name,
-        "file_path": new_doc.file_path.replace("\\", "/"),
+        "file_url": new_doc.file_path,
         "uploaded_at": new_doc.uploaded_at,
     }

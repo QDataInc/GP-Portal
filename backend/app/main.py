@@ -1,38 +1,60 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.openapi.utils import get_openapi
 
-# --- Local imports ---
 from app.services.database import Base, engine
-from app.models import (
-    investment_model,
-    document_model,
-    profile_model,
-    user_model,
-)
-from app.routers import (
-    investments,
-    documents,
-    profiles,
-    auth,
-)
+from app.routers import auth, investments, documents, profiles
 
-# --- Initialize FastAPI app ---
-app = FastAPI(
-    title="GP Portal API",
-    version="1.0",
-    description="Backend API for Victory GP Portal (Investments, Documents, Profiles, Auth).",
-)
-
-# --- Database setup ---
 Base.metadata.create_all(bind=engine)
 
-# --- CORS setup ---
+app = FastAPI(
+    title="GP Portal API",
+    version="1.0"
+)
+
+# ---------------------------------------------------------
+# CUSTOM OPENAPI → REMOVE OAUTH2 AND FORCE BEARER AUTH
+# ---------------------------------------------------------
+def custom_openapi():
+    openapi_schema = get_openapi(
+        title="GP Portal API",
+        version="1.0",
+        routes=app.routes,
+    )
+
+    # Remove OAuth2 if exists
+    if "securitySchemes" in openapi_schema.get("components", {}):
+        openapi_schema["components"]["securitySchemes"].pop("OAuth2PasswordBearer", None)
+
+    # Add BearerAuth
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
+    }
+
+    # Apply BearerAuth to all endpoints
+    for path in openapi_schema["paths"].values():
+        for method in path.values():
+            method["security"] = [{"BearerAuth": []}]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+# ---------------------------------------------------------
+# CORS
+# ---------------------------------------------------------
 origins = [
-    "http://localhost:5173",       # Frontend local dev
-    "http://127.0.0.1:5173",       # Alternate localhost reference
-    "https://gp-portal.vercel.app" # Deployed frontend
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://gp-portal.vercel.app"
 ]
 
 app.add_middleware(
@@ -43,19 +65,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- OAuth2 (for token-based endpoints) ---
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
-
-# --- Static files ---
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
-# --- Routers ---
+# ---------------------------------------------------------
+# Routers
+# ---------------------------------------------------------
+app.include_router(auth.router)
 app.include_router(investments.router)
 app.include_router(documents.router)
 app.include_router(profiles.router)
-app.include_router(auth.router)
 
-# --- Root endpoint ---
 @app.get("/")
 def root():
-    return {"message": "✅ GP Portal Backend is running successfully!"}
+    return {"message": "Backend running successfully!"}
