@@ -1,9 +1,12 @@
-import { useState } from "react";
+// src/pages/Profiles.jsx
+import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { getMyProfile, addProfile, updateProfile } from "../api/profiles";
 
 export default function Profiles() {
   const [showEIN, setShowEIN] = useState(false);
 
+  // form fields (keep exactly as your UI expects)
   const [formData, setFormData] = useState({
     profileType: "",
     entityName: "",
@@ -17,15 +20,68 @@ export default function Profiles() {
     ein: "*****5024",
   });
 
+  // backend profile id
+  const [profileId, setProfileId] = useState(null);
+
+  // Load profile on page load
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const profile = await getMyProfile();
+
+        setProfileId(profile.id);
+
+        // Map backend → frontend fields
+        setFormData((prev) => ({
+          ...prev,
+          profileType: profile.profile_type || "",
+          entityName: profile.entity_name || "",
+          jurisdiction: profile.jurisdiction || "",
+          federalTax: profile.tax_classification || "",
+          // keep all UI-only fields (dateFormed, iraLLC, etc.) unchanged
+        }));
+      } catch (err) {
+        console.error("Failed to load profile:", err);
+      }
+    }
+
+    loadProfile();
+  }, []);
+
+  // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  // Save profile to backend
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Profile saved:", formData);
-    alert("Profile details saved!");
+
+    // Map frontend → backend fields
+    const payload = {
+      entity_name: formData.entityName,
+      jurisdiction: formData.jurisdiction || null,
+      tax_classification: formData.federalTax || null,
+      profile_type: formData.profileType || null,
+      contact_email: null,
+      contact_phone: null,
+    };
+
+    try {
+      if (profileId) {
+        await updateProfile(profileId, payload);
+      } else {
+        const created = await addProfile(payload);
+        setProfileId(created.id);
+      }
+
+      alert("Profile details saved!");
+      console.log("Profile saved:", payload);
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      alert("Failed to save profile. Please try again.");
+    }
   };
 
   return (

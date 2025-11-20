@@ -17,6 +17,9 @@ import MainLayout from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import Documents from "./pages/Documents";
 import Investments from "./pages/Investments";
+import Profiles from "./pages/Profiles";
+import Settings from "./pages/Settings";
+import Deals from "./pages/Deals";
 
 function App() {
   return (
@@ -45,6 +48,9 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="documents" element={<Documents />} />
             <Route path="investments" element={<Investments />} />
+            <Route path="profiles" element={<Profiles />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="deals" element={<Deals />} />
           </Route>
 
           {/* FALLBACK — redirect unknown routes */}
