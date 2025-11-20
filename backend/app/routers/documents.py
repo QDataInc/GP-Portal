@@ -1,20 +1,22 @@
-# /app/routers/documents.py
+# backend/app/routers/documents.py
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from app.models.document_model import Document
-from app.services.database import get_db
-from app.routers.auth import get_current_user
+import os
 
 from azure.storage.blob import BlobServiceClient
-import os
+
+from app.models.document_model import Document
+from app.models.user_model import User
+from app.services.database import get_db
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
 # -----------------------------------------------------------
-# 🔒 Azure Blob Storage Settings (USE VALID KEY!)
+# 🔒 Azure Blob Storage Settings
 # -----------------------------------------------------------
 AZURE_BLOB_CONNECTION_STRING = (
     "DefaultEndpointsProtocol=https;"
@@ -26,14 +28,25 @@ AZURE_CONTAINER_NAME = "documents"
 
 
 # -----------------------------------------------------------
-# 📌 GET DOCUMENTS
+# 📌 GET DOCUMENTS (current user only)
 # -----------------------------------------------------------
 @router.get("/", response_model=List[dict])
 def get_documents(
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user_email: str = Depends(get_current_user),
 ):
-    docs = db.query(Document).order_by(Document.uploaded_at.desc()).all()
+    # Resolve email -> User row
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    docs = (
+        db.query(Document)
+        .filter(Document.uploaded_by_id == user.id)
+        .order_by(Document.uploaded_at.desc())
+        .all()
+    )
+
     return [
         {
             "id": d.id,
@@ -49,7 +62,7 @@ def get_documents(
 
 
 # -----------------------------------------------------------
-# 📤 UPLOAD DOCUMENT TO AZURE BLOB STORAGE
+# 📤 UPLOAD DOCUMENT → Azure Blob + SQL
 # -----------------------------------------------------------
 @router.post("/upload")
 async def upload_document(
@@ -58,23 +71,27 @@ async def upload_document(
     deal_name: str = Form(None),
     profile_name: str = Form(None),
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user_email: str = Depends(get_current_user),
 ):
-    # 1️⃣ Validate file type
+    # 0️⃣ Resolve email -> User row
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    # 1️⃣ Validate PDF
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
-    # 2️⃣ Connect to Azure Blob Storage
+    # 2️⃣ Connect to Azure Blob
     blob_service = BlobServiceClient.from_connection_string(AZURE_BLOB_CONNECTION_STRING)
     container = blob_service.get_container_client(AZURE_CONTAINER_NAME)
 
-    # Ensure container exists
     try:
         container.create_container()
     except Exception:
-        pass  # ignore if exists
+        # ignore if container already exists
+        pass
 
-    # Debug print (optional)
     print("Uploading to container:", container.url)
 
     # 3️⃣ Generate unique blob name
@@ -88,17 +105,17 @@ async def upload_document(
         blob_client = container.get_blob_client(blob_name)
         counter += 1
 
-    # 4️⃣ Upload file → Azure Blob Storage
+    # 4️⃣ Upload file to Azure Blob
     try:
         contents = await file.read()
         blob_client.upload_blob(contents, overwrite=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Blob upload failed: {str(e)}")
 
-    # 5️⃣ Create Blob URL
+    # 5️⃣ Build Blob URL
     blob_url = f"{container.url}/{blob_name}"
 
-    # 6️⃣ Save metadata → Azure SQL
+    # 6️⃣ Save metadata in SQL with correct uploaded_by_id
     new_doc = Document(
         name=blob_name,
         label=label,
@@ -106,13 +123,14 @@ async def upload_document(
         profile_name=profile_name,
         file_path=blob_url,
         uploaded_at=datetime.utcnow(),
+        uploaded_by_id=user.id,  # 👈 now guaranteed NOT NULL
     )
 
     db.add(new_doc)
     db.commit()
     db.refresh(new_doc)
 
-    # 7️⃣ Response → Frontend
+    # 7️⃣ Response
     return {
         "message": "File uploaded successfully",
         "id": new_doc.id,
