@@ -84,6 +84,20 @@ def get_current_user(
 
 
 # =========================================================
+# ADMIN-ONLY DEPENDENCY
+# =========================================================
+def get_current_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.role != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
+
+
+# =========================================================
 # REGISTER USER
 # =========================================================
 @router.post("/register")
@@ -166,5 +180,6 @@ def login_verify_otp(request: LoginVerifyOTP, db: Session = Depends(get_db)):
             "id": user.id,
             "email": user.email,
             "name": user.username,
+            "role": user.role,
         },
     }

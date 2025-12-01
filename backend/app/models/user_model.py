@@ -24,3 +24,6 @@ class User(Base):
 
     # Reverse relationship to documents
     documents = relationship("Document", back_populates="uploaded_by")
+
+    # NEW FIELD (Correct)
+    role = Column(String(50), nullable=False, default="User")

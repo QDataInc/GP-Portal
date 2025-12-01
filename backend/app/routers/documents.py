@@ -33,16 +33,13 @@ AZURE_CONTAINER_NAME = "documents"
 @router.get("/", response_model=List[dict])
 def get_documents(
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    # Resolve email -> User row
-    user = db.query(User).filter(User.email == current_user_email).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+    # current_user is already a User object from the token
 
     docs = (
         db.query(Document)
-        .filter(Document.uploaded_by_id == user.id)
+        .filter(Document.uploaded_by_id == current_user.id)
         .order_by(Document.uploaded_at.desc())
         .all()
     )
@@ -71,12 +68,9 @@ async def upload_document(
     deal_name: str = Form(None),
     profile_name: str = Form(None),
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    # 0️⃣ Resolve email -> User row
-    user = db.query(User).filter(User.email == current_user_email).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+    # current_user is already a User object
 
     # 1️⃣ Validate PDF
     if not file.filename.lower().endswith(".pdf"):
@@ -123,7 +117,7 @@ async def upload_document(
         profile_name=profile_name,
         file_path=blob_url,
         uploaded_at=datetime.utcnow(),
-        uploaded_by_id=user.id,  # 👈 now guaranteed NOT NULL
+        uploaded_by_id=current_user.id,  # 👈 linked to logged-in user
     )
 
     db.add(new_doc)

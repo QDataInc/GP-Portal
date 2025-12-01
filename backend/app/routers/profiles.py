@@ -1,13 +1,14 @@
+# backend/app/routers/profiles.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 
 from app.models.profile_model import Profile
-from app.models.user_model import User  # 👈 we now use the users table
+from app.models.user_model import User
 from app.services.database import get_db
-from app.routers.auth import get_current_user  # returns the user's email (string)
-
+from app.routers.auth import get_current_user  # ✅ returns User object now
 
 router = APIRouter(prefix="/api/profiles", tags=["Profiles"])
 
@@ -38,47 +39,37 @@ class ProfileCreate(BaseModel):
     contact_phone: Optional[str] = None
 
 
-# Small helper to resolve current_user email -> User row
-def _get_current_user_obj(db: Session, current_user_email: str) -> User:
-    user = db.query(User).filter(User.email == current_user_email).first()
-    if not user:
-        raise HTTPException(status_code=403, detail="Current user not found in DB")
-    return user
-
-
 # ---------------------------------------------------------
 # GET current user's profile  ->  /api/profiles/me
 # ---------------------------------------------------------
 @router.get("/me", response_model=ProfileSchema)
 def get_my_profile(
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),  # 👈 this is an email string
+    current_user: User = Depends(get_current_user),  # ✅ this is a User object
 ):
     """
     Return the profile for the currently authenticated user.
 
-    - Resolve the user from the email returned by get_current_user
+    - use current_user.id directly (already resolved from token / session)
     - If a Profile row exists for this user_id, return it.
     - If none exists, auto-create a default Profile for this user and return it.
     """
 
-    user = _get_current_user_obj(db, current_user)
-
     profile = (
         db.query(Profile)
-        .filter(Profile.user_id == user.id)
+        .filter(Profile.user_id == current_user.id)
         .first()
     )
 
     if profile is None:
         # auto-create a default profile linked to this user_id
         profile = Profile(
-            user_id=user.id,
+            user_id=current_user.id,
             entity_name="Default GP Entity",
             jurisdiction=None,
             tax_classification=None,
             profile_type=None,
-            contact_email=user.email,
+            contact_email=current_user.email,
             contact_phone=None,
         )
         db.add(profile)
@@ -92,13 +83,11 @@ def get_my_profile(
 @router.get("/", response_model=List[ProfileSchema])
 def get_profiles(
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    user = _get_current_user_obj(db, current_user)
-
     return (
         db.query(Profile)
-        .filter(Profile.user_id == user.id)
+        .filter(Profile.user_id == current_user.id)
         .all()
     )
 
@@ -108,13 +97,11 @@ def get_profiles(
 def get_profile(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    user = _get_current_user_obj(db, current_user)
-
     rec = (
         db.query(Profile)
-        .filter(Profile.id == profile_id, Profile.user_id == user.id)
+        .filter(Profile.id == profile_id, Profile.user_id == current_user.id)
         .first()
     )
     if not rec:
@@ -127,15 +114,14 @@ def get_profile(
 def create_profile(
     profile: ProfileCreate,
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create a new profile for the current user.
     """
-    user = _get_current_user_obj(db, current_user)
 
     rec = Profile(
-        user_id=user.id,
+        user_id=current_user.id,
         **profile.dict(),
     )
     db.add(rec)
@@ -150,13 +136,11 @@ def update_profile(
     profile_id: int,
     updated: ProfileCreate,
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    user = _get_current_user_obj(db, current_user)
-
     rec = (
         db.query(Profile)
-        .filter(Profile.id == profile_id, Profile.user_id == user.id)
+        .filter(Profile.id == profile_id, Profile.user_id == current_user.id)
         .first()
     )
     if not rec:
@@ -174,13 +158,11 @@ def update_profile(
 def delete_profile(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    user = _get_current_user_obj(db, current_user)
-
     rec = (
         db.query(Profile)
-        .filter(Profile.id == profile_id, Profile.user_id == user.id)
+        .filter(Profile.id == profile_id, Profile.user_id == current_user.id)
         .first()
     )
     if not rec:
