@@ -46,7 +46,7 @@ class LoginVerifyOTP(BaseModel):
 
 
 # =========================================================
-# CORRECT get_current_user — returns FULL USER object
+# get_current_user — returns FULL USER object
 # =========================================================
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
@@ -172,8 +172,12 @@ def login_verify_otp(request: LoginVerifyOTP, db: Session = Depends(get_db)):
     user.email_otp_expiry = None
     db.commit()
 
-    access_token = create_access_token({"sub": user.email})
-
+    access_token = create_access_token(
+    {
+        "sub": user.email,
+        "role": user.role,
+    }
+)
     return {
         "access_token": access_token,
         "user": {
@@ -182,4 +186,24 @@ def login_verify_otp(request: LoginVerifyOTP, db: Session = Depends(get_db)):
             "name": user.username,
             "role": user.role,
         },
+    }
+
+
+# =========================================================
+# ADMIN CHECK – simple test endpoint
+# =========================================================
+@router.get("/admin-check")
+def admin_check(
+    current_admin: User = Depends(get_current_admin),
+):
+    """
+    Simple endpoint to verify admin access is working.
+
+    - Returns 200 only if current_user.role == "Admin"
+    - Otherwise get_current_admin raises 403
+    """
+    return {
+        "message": f"Hello Admin {current_admin.email}",
+        "role": current_admin.role,
+        "id": current_admin.id,
     }
