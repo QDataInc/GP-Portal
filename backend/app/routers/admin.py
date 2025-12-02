@@ -11,11 +11,24 @@ from app.models.investment_model import Investment
 from app.models.profile_model import Profile
 from app.models.user_model import User
 from app.routers.auth import get_current_admin
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+import os
+from azure.storage.blob import BlobServiceClient
 
 # ---------------------------------------------------------
 # Admin router -> all endpoints here are /api/admin/...
 # ---------------------------------------------------------
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
+
+# Azure Blob (same settings as documents router)
+AZURE_BLOB_CONNECTION_STRING = (
+    "DefaultEndpointsProtocol=https;"
+    "AccountName=gpportal;"
+    "AccountKey=82owS0tGAvaSaQPzuh7XJc44rWBBnzweNAmnpttM7GIDErQYizl6Ln5BAcXBnFbbwdw86ud5jaY++AStN1t9/Q==;"
+    "EndpointSuffix=core.windows.net"
+)
+AZURE_CONTAINER_NAME = "documents"
 
 
 # ---------------------------------------------------------
@@ -203,3 +216,64 @@ def get_profile_by_id_admin(
         "contact_phone": rec.contact_phone,
         "user_id": rec.user_id,
     }
+
+
+# ---------------------------------------------------------
+# GET /api/admin/documents/{doc_id}/view
+# GET /api/admin/documents/{doc_id}/download
+#  - Streams the PDF through the backend so private blob containers can be accessed
+#  - Admin-only
+# ---------------------------------------------------------
+
+
+@router.get("/documents/{doc_id}/view")
+def admin_view_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    rec = db.query(Document).filter(Document.id == doc_id).first()
+    if not rec or not rec.file_path:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # derive blob name from stored URL
+    blob_name = os.path.basename(rec.file_path)
+
+    try:
+        blob_service = BlobServiceClient.from_connection_string(AZURE_BLOB_CONNECTION_STRING)
+        container = blob_service.get_container_client(AZURE_CONTAINER_NAME)
+        blob_client = container.get_blob_client(blob_name)
+        stream = blob_client.download_blob()
+        data = stream.readall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch blob: {str(e)}")
+
+    return StreamingResponse(BytesIO(data), media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="{rec.name}"'
+    })
+
+
+@router.get("/documents/{doc_id}/download")
+def admin_download_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    rec = db.query(Document).filter(Document.id == doc_id).first()
+    if not rec or not rec.file_path:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    blob_name = os.path.basename(rec.file_path)
+
+    try:
+        blob_service = BlobServiceClient.from_connection_string(AZURE_BLOB_CONNECTION_STRING)
+        container = blob_service.get_container_client(AZURE_CONTAINER_NAME)
+        blob_client = container.get_blob_client(blob_name)
+        stream = blob_client.download_blob()
+        data = stream.readall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch blob: {str(e)}")
+
+    return StreamingResponse(BytesIO(data), media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{rec.name}"'
+    })
