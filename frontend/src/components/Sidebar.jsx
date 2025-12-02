@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import {
   LayoutDashboard,
   Briefcase,
@@ -20,6 +21,14 @@ const navLinks = [
 ];
 
 export default function Sidebar({ open, toggle, collapsed, setCollapsed }) {
+  const { role } = useAuth();
+  const linksToRender = [...navLinks];
+
+  // Add Admin link if user is an Admin
+  if (role === "Admin") {
+    linksToRender.push({ name: "Admin", path: "/admin/documents", icon: FileText });
+  }
+
   return (
     <>
       {/* Backdrop for mobile */}
@@ -58,7 +67,7 @@ export default function Sidebar({ open, toggle, collapsed, setCollapsed }) {
 
         {/* Navigation */}
         <nav className="mt-4 flex flex-col gap-1 px-2">
-          {navLinks.map(({ name, path, icon: Icon }) => (
+          {linksToRender.map(({ name, path, icon: Icon }) => (
             <NavLink
               key={path}
               to={path}

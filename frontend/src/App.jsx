@@ -23,6 +23,10 @@ import Settings from "./pages/Settings";
 import Deals from "./pages/Deals";
 import AdminRoute from "./pages/AdminRoute";
 import AdminDocumentsPage from "./pages/AdminDocumentsPage";
+import AdminInvestmentsPage from "./pages/AdminInvestmentsPage";
+import AdminInvestmentsSummary from "./pages/AdminInvestmentsSummary";
+import AdminProfilesPage from "./pages/AdminProfilesPage";
+import AdminProfileDetail from "./pages/AdminProfileDetail";
 
 function App() {
   return (
@@ -60,6 +64,41 @@ function App() {
               element={
                 <AdminRoute>
                   <AdminDocumentsPage />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="admin/investments"
+              element={
+                <AdminRoute>
+                  <AdminInvestmentsPage />
+                </AdminRoute>
+              }
+            />
+
+            <Route
+              path="admin/investments/summary"
+              element={
+                <AdminRoute>
+                  <AdminInvestmentsSummary />
+                </AdminRoute>
+              }
+            />
+
+            <Route
+              path="admin/profiles"
+              element={
+                <AdminRoute>
+                  <AdminProfilesPage />
+                </AdminRoute>
+              }
+            />
+
+            <Route
+              path="admin/profiles/:id"
+              element={
+                <AdminRoute>
+                  <AdminProfileDetail />
                 </AdminRoute>
               }
             />
