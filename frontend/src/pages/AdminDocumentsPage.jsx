@@ -6,6 +6,7 @@ const AdminDocumentsPage = () => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Simple load of /api/admin/documents
   useEffect(() => {
@@ -51,6 +52,7 @@ const AdminDocumentsPage = () => {
             <th>Profile</th>
             <th>Uploaded By</th>
             <th>Uploaded At</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -66,7 +68,65 @@ const AdminDocumentsPage = () => {
                   ? doc.uploaded_by_email
                   : `User #${doc.uploaded_by_id}`}
               </td>
-              <td>{doc.uploaded_at}</td>
+              <td>{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleString() : "-"}</td>
+              <td>
+                {doc.file_path ? (
+                  <>
+                    <button
+                      onClick={async () => {
+                        try {
+                          setActionLoading(true);
+                          const res = await axiosClient.get(
+                            `/api/admin/documents/${doc.id}/view`,
+                            { responseType: "blob" }
+                          );
+                          const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+                          window.open(url, "_blank");
+                        } catch (err) {
+                          console.error(err);
+                          setError("Failed to open document");
+                        } finally {
+                          setActionLoading(false);
+                        }
+                      }}
+                      style={{ marginRight: 8 }}
+                      disabled={actionLoading}
+                    >
+                      View
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          setActionLoading(true);
+                          const res = await axiosClient.get(
+                            `/api/admin/documents/${doc.id}/download`,
+                            { responseType: "blob" }
+                          );
+                          const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = doc.name || `document_${doc.id}.pdf`;
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          window.URL.revokeObjectURL(url);
+                        } catch (err) {
+                          console.error(err);
+                          setError("Failed to download document");
+                        } finally {
+                          setActionLoading(false);
+                        }
+                      }}
+                      disabled={actionLoading}
+                    >
+                      Download
+                    </button>
+                  </>
+                ) : (
+                  "No file"
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

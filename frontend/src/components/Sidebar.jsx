@@ -24,9 +24,11 @@ export default function Sidebar({ open, toggle, collapsed, setCollapsed }) {
   const { role } = useAuth();
   const linksToRender = [...navLinks];
 
-  // Add Admin link if user is an Admin
+  // Add Admin sub-links if user is an Admin
   if (role === "Admin") {
-    linksToRender.push({ name: "Admin", path: "/admin/documents", icon: FileText });
+    linksToRender.push({ name: "Admin: Documents", path: "/admin/documents", icon: FileText });
+    linksToRender.push({ name: "Admin: Investments", path: "/admin/investments", icon: Briefcase });
+    linksToRender.push({ name: "Admin: Profiles", path: "/admin/profiles", icon: User });
   }
 
   return (
