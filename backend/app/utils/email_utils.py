@@ -50,6 +50,7 @@ def send_document_notification(to_email: str, doc_name: str, frontend_url: str):
     """
     Sends a notification email to the user when a document is added to their portal.
     """
+    frontend_login_url = "http://localhost:5173/auth/start"
     subject = "New document added to your GP Portal"
     message = f"""
     <p>Hello,</p>
