@@ -12,6 +12,7 @@ import Password from "./pages/auth/Password";
 import Otp from "./pages/auth/Otp";
 import Register from "./pages/auth/Register";
 
+
 // APP LAYOUT + PAGES
 import MainLayout from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
@@ -20,6 +21,8 @@ import Investments from "./pages/Investments";
 import Profiles from "./pages/Profiles";
 import Settings from "./pages/Settings";
 import Deals from "./pages/Deals";
+import AdminRoute from "./pages/AdminRoute";
+import AdminDocumentsPage from "./pages/AdminDocumentsPage";
 
 function App() {
   return (
@@ -51,6 +54,18 @@ function App() {
             <Route path="profiles" element={<Profiles />} />
             <Route path="settings" element={<Settings />} />
             <Route path="deals" element={<Deals />} />
+              {/* ADMIN ROUTE – only Admins can see */}
+            <Route
+              path="admin/documents"
+              element={
+                <AdminRoute>
+                  <AdminDocumentsPage />
+                </AdminRoute>
+              }
+            />
+
+
+
           </Route>
 
           {/* FALLBACK — redirect unknown routes */}
