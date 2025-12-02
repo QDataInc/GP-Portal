@@ -35,11 +35,16 @@ def get_documents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # current_user is already a User object from the token
-
+    # Return documents uploaded by or assigned to the current user
+    from sqlalchemy import or_
     docs = (
         db.query(Document)
-        .filter(Document.uploaded_by_id == current_user.id)
+        .filter(
+            or_(
+                Document.uploaded_by_id == current_user.id,
+                Document.recipient_user_id == current_user.id
+            )
+        )
         .order_by(Document.uploaded_at.desc())
         .all()
     )
@@ -53,6 +58,8 @@ def get_documents(
             "profile_name": d.profile_name,
             "file_path": d.file_path,
             "uploaded_at": d.uploaded_at,
+            "uploaded_by_id": d.uploaded_by_id,
+            "recipient_user_id": d.recipient_user_id,
         }
         for d in docs
     ]

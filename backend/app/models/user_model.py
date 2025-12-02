@@ -22,8 +22,18 @@ class User(Base):
     mfa_secret = Column(String, nullable=True)
     mfa_enabled = Column(Boolean, default=False)
 
-    # Reverse relationship to documents
-    documents = relationship("Document", back_populates="uploaded_by")
+    # Reverse relationship to documents (uploaded)
+    documents = relationship(
+        "Document",
+        back_populates="uploaded_by",
+        foreign_keys="Document.uploaded_by_id"
+    )
+
+    # Documents assigned to this user (received)
+    received_documents = relationship(
+        "Document",
+        foreign_keys="Document.recipient_user_id"
+    )
 
     # NEW FIELD (Correct)
     role = Column(String(50), nullable=False, default="User")

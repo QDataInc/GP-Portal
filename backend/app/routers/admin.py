@@ -1,25 +1,31 @@
-# backend/app/routers/admin.py
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from datetime import datetime
+from app.utils.email_utils import send_document_notification
 from sqlalchemy.orm import Session
 from typing import List
-
 from sqlalchemy import func
 from app.services.database import get_db
 from app.models.document_model import Document
 from app.models.investment_model import Investment
 from app.models.profile_model import Profile
 from app.models.user_model import User
-from app.routers.auth import get_current_admin
-from fastapi.responses import StreamingResponse
+from app.routers.auth import get_current_admin, get_current_user
+from fastapi.responses import StreamingResponse, HTMLResponse
 from io import BytesIO
 import os
 from azure.storage.blob import BlobServiceClient
 
-# ---------------------------------------------------------
-# Admin router -> all endpoints here are /api/admin/...
-# ---------------------------------------------------------
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
+
+
+router = APIRouter(prefix="/api/admin", tags=["Admin"])
+
+# GET /api/admin/users — returns all users (id, email)
+@router.get("/users")
+def get_all_users(db: Session = Depends(get_db), current_admin: User = Depends(get_current_admin)):
+    users = db.query(User).all()
+    return [{"id": user.id, "email": user.email} for user in users]
 
 # Azure Blob (same settings as documents router)
 AZURE_BLOB_CONNECTION_STRING = (
@@ -29,6 +35,133 @@ AZURE_BLOB_CONNECTION_STRING = (
     "EndpointSuffix=core.windows.net"
 )
 AZURE_CONTAINER_NAME = "documents"
+
+# ---------------------------------------------------------
+# POST /api/admin/documents/upload-for-user
+#  - Admin uploads a document and assigns it to a user
+# ---------------------------------------------------------
+@router.post("/documents/upload-for-user")
+async def admin_upload_for_user(
+    recipient_user_id: int = Form(...),
+    file: UploadFile = File(...),
+    label: str = Form(None),
+    deal_name: str = Form(None),
+    profile_name: str = Form(None),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    recipient = db.query(User).filter(User.id == recipient_user_id).first()
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files allowed")
+
+    blob_service = BlobServiceClient.from_connection_string(AZURE_BLOB_CONNECTION_STRING)
+    container = blob_service.get_container_client(AZURE_CONTAINER_NAME)
+    try:
+        container.create_container()
+    except Exception:
+        pass
+
+    blob_name = file.filename
+    base_name, ext = os.path.splitext(blob_name)
+    blob_client = container.get_blob_client(blob_name)
+    counter = 1
+    while blob_client.exists():
+        blob_name = f"{base_name}_{counter}{ext}"
+        blob_client = container.get_blob_client(blob_name)
+        counter += 1
+
+    contents = await file.read()
+    blob_client.upload_blob(contents, overwrite=True)
+    blob_url = f"{container.url}/{blob_name}"
+
+    new_doc = Document(
+        name=blob_name,
+        label=label,
+        deal_name=deal_name,
+        profile_name=profile_name,
+        file_path=blob_url,
+        uploaded_at=datetime.utcnow(),
+        uploaded_by_id=current_admin.id,
+        recipient_user_id=recipient_user_id,
+    )
+    db.add(new_doc)
+    db.commit()
+    db.refresh(new_doc)
+
+    # Send notification email
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    send_document_notification(recipient.email, new_doc.name, frontend_url)
+
+    return {"message": "Uploaded", "id": new_doc.id, "file_url": blob_url}
+
+# ---------------------------------------------------------
+# GET /api/admin/documents/{doc_id}/user-view
+# GET /api/admin/documents/{doc_id}/user-download
+#  - Streams the PDF for the assigned user or uploader or admin
+# ---------------------------------------------------------
+from app.routers.auth import get_current_user
+
+@router.get("/documents/{doc_id}/user-view")
+def user_view_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rec = db.query(Document).filter(Document.id == doc_id).first()
+    if not rec or not rec.file_path:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # permission check
+    if not (
+        current_user.role == "Admin"
+        or rec.uploaded_by_id == current_user.id
+        or rec.recipient_user_id == current_user.id
+    ):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    blob_name = os.path.basename(rec.file_path)
+    blob_service = BlobServiceClient.from_connection_string(AZURE_BLOB_CONNECTION_STRING)
+    container = blob_service.get_container_client(AZURE_CONTAINER_NAME)
+    blob_client = container.get_blob_client(blob_name)
+    stream = blob_client.download_blob()
+    def iterfile():
+        for chunk in stream.chunks():
+            yield chunk
+    return StreamingResponse(iterfile(), media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="{rec.name}"'
+    })
+
+@router.get("/documents/{doc_id}/user-download")
+def user_download_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rec = db.query(Document).filter(Document.id == doc_id).first()
+    if not rec or not rec.file_path:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not (
+        current_user.role == "Admin"
+        or rec.uploaded_by_id == current_user.id
+        or rec.recipient_user_id == current_user.id
+    ):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    blob_name = os.path.basename(rec.file_path)
+    blob_service = BlobServiceClient.from_connection_string(AZURE_BLOB_CONNECTION_STRING)
+    container = blob_service.get_container_client(AZURE_CONTAINER_NAME)
+    blob_client = container.get_blob_client(blob_name)
+    stream = blob_client.download_blob()
+    def iterfile():
+        for chunk in stream.chunks():
+            yield chunk
+    return StreamingResponse(iterfile(), media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{rec.name}"'
+    })
 
 
 # ---------------------------------------------------------

@@ -18,8 +18,8 @@ class Document(Base):
     file_path = Column(String, nullable=False)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
-    # NEW: who uploaded this document (FK to users.id)
     uploaded_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    # Optional relationship back to User
-    uploaded_by = relationship("User", back_populates="documents")
+    uploaded_by = relationship("User", back_populates="documents", foreign_keys=[uploaded_by_id])
+    recipient = relationship("User", foreign_keys=[recipient_user_id])
