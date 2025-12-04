@@ -18,3 +18,9 @@ export const deleteInvestment = async (id) => {
   const res = await axiosClient.delete(`/api/investments/${id}`);
   return res.data;
 };
+
+// ✅ Get investment summary
+export const getInvestmentSummary = async () => {
+  const res = await axiosClient.get("/api/investments/summary");
+  return res.data;
+};
