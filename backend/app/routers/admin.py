@@ -21,11 +21,20 @@ router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
-# GET /api/admin/users — returns all users (id, email)
+# GET /api/admin/users — returns all users (id, email, name fields)
 @router.get("/users")
 def get_all_users(db: Session = Depends(get_db), current_admin: User = Depends(get_current_admin)):
     users = db.query(User).all()
-    return [{"id": user.id, "email": user.email} for user in users]
+    return [
+        {
+            "id": user.id,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "username": user.username,
+        }
+        for user in users
+    ]
 
 # Azure Blob (same settings as documents router)
 AZURE_BLOB_CONNECTION_STRING = (

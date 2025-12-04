@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+from datetime import date
 from pydantic import BaseModel
 from sqlalchemy import func
 from app.services.database import get_db
@@ -17,6 +18,7 @@ class InvestmentSchema(BaseModel):
     distribution_total: float
     status: str
     uploaded_by_id: int  # 🔹 added so you can see who created it
+    close_date: Optional[date] = None  # Date field
 
     class Config:
         from_attributes = True
