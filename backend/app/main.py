@@ -4,6 +4,8 @@ from fastapi.openapi.utils import get_openapi
 
 from app.services.database import Base, engine
 from app.routers import auth, investments, documents, profiles, admin
+from app.routers import deals
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -73,6 +75,9 @@ app.include_router(investments.router)
 app.include_router(documents.router)
 app.include_router(profiles.router)
 app.include_router(admin.router)
+app.include_router(deals.router)
+app.include_router(deals.admin_router)
+
 
 @app.get("/")
 def root():
