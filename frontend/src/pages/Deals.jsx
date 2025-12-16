@@ -1,10 +1,10 @@
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getDeals } from "../api/deals";
 import { useNavigate } from "react-router-dom";
+import { getDeals } from "../api/deals";
 
 export default function Deals() {
-  const navigate = useNavigate(); // ✅ USED
+  const navigate = useNavigate();
 
   const [deals, setDeals] = useState([]);
   const [dealsSearch, setDealsSearch] = useState("");
@@ -12,8 +12,7 @@ export default function Deals() {
   const [isLoadingDeals, setIsLoadingDeals] = useState(true);
   const [dealsError, setDealsError] = useState("");
 
-  // Phase 1: Deals are admin-created and visible to all users.
-  // Joined deals + in-progress investments will be wired to interest/investment tables in Phase 2+.
+  // Phase 1/2: In-progress investments are not wired yet
   const inProgress = [];
 
   useEffect(() => {
@@ -23,11 +22,15 @@ export default function Deals() {
       try {
         setIsLoadingDeals(true);
         setDealsError("");
+
         const apiDeals = await getDeals();
+
         if (!isMounted) return;
         setDeals(Array.isArray(apiDeals) ? apiDeals : []);
       } catch (err) {
         if (!isMounted) return;
+
+        console.error("Deals API error:", err);
         setDealsError("Unable to load deals. Please try again.");
         setDeals([]);
       } finally {
@@ -52,17 +55,16 @@ export default function Deals() {
 
   const joinedDeals = useMemo(() => {
     const search = dealsSearch.trim().toLowerCase();
+
     return deals
       .filter((d) => {
         if (!search) return true;
+
         const name = (d.name || "").toLowerCase();
         const sponsor = (d.sponsors || "").toLowerCase();
         const stage = (d.deal_stage || "").toLowerCase();
-        return (
-          name.includes(search) ||
-          sponsor.includes(search) ||
-          stage.includes(search)
-        );
+
+        return name.includes(search) || sponsor.includes(search) || stage.includes(search);
       })
       .map((d) => ({
         id: d.id,
@@ -82,22 +84,16 @@ export default function Deals() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-800">Deals</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Manage your current and in-progress investments.
-        </p>
+        <p className="text-gray-500 text-sm mt-1">Manage your current and in-progress investments.</p>
       </div>
 
       {/* Joined Deals Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-800">
-            Joined deals
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-800">Joined deals</h2>
+
           <div className="relative w-64">
-            <Search
-              size={16}
-              className="absolute left-3 top-2.5 text-gray-400"
-            />
+            <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
             <input
               type="text"
               placeholder="Search deals..."
@@ -108,9 +104,7 @@ export default function Deals() {
           </div>
         </div>
 
-        {isLoadingDeals && (
-          <div className="text-sm text-gray-500">Loading deals...</div>
-        )}
+        {isLoadingDeals && <div className="text-sm text-gray-500">Loading deals...</div>}
 
         {!isLoadingDeals && dealsError && (
           <div className="text-sm text-red-600">{dealsError}</div>
@@ -123,43 +117,47 @@ export default function Deals() {
                 <th className="px-4 py-3 text-left">Deal name</th>
                 <th className="px-4 py-3 text-left">Deal stage</th>
                 <th className="px-4 py-3 text-left">Close date</th>
-                <th className="px-4 py-3 text-left">
-                  Includes investments by
-                </th>
+                <th className="px-4 py-3 text-left">Includes investments by</th>
                 <th className="px-4 py-3 text-left">Sponsors</th>
                 <th className="px-4 py-3 text-left">Investment total</th>
-                <th className="px-4 py-3 text-left">
-                  Distribution total
-                </th>
+                <th className="px-4 py-3 text-left">Distribution total</th>
                 <th className="px-4 py-3 text-left">Action required</th>
               </tr>
             </thead>
+
             <tbody>
-              {joinedDeals.map((deal) => (
-                <tr key={deal.id} className="border-b hover:bg-gray-50">
-                  <td
-                    className="px-4 py-3 text-blue-600 font-medium hover:underline cursor-pointer"
-                    onClick={() => navigate(`/deals/${deal.id}`)} // ✅ NAVIGATION
-                  >
-                    {deal.dealName}
-                  </td>
-                  <td className="px-4 py-3">{deal.dealStage}</td>
-                  <td className="px-4 py-3">{deal.closeDate}</td>
-                  <td className="px-4 py-3">{deal.includes}</td>
-                  <td className="px-4 py-3">{deal.sponsors}</td>
-                  <td className="px-4 py-3">{deal.investmentTotal}</td>
-                  <td className="px-4 py-3">{deal.distributionTotal}</td>
-                  <td className="px-4 py-3">{deal.action}</td>
-                </tr>
-              ))}
+              {!isLoadingDeals &&
+                !dealsError &&
+                joinedDeals.map((deal) => (
+                  <tr key={deal.id} className="border-b hover:bg-gray-50">
+                    <td
+                      className="px-4 py-3 text-blue-600 font-medium hover:underline cursor-pointer"
+                      onClick={() => navigate(`/deals/${deal.id}`)}
+                    >
+                      {deal.dealName}
+                    </td>
+                    <td className="px-4 py-3">{deal.dealStage}</td>
+                    <td className="px-4 py-3">{deal.closeDate}</td>
+                    <td className="px-4 py-3">{deal.includes}</td>
+                    <td className="px-4 py-3">{deal.sponsors}</td>
+                    <td className="px-4 py-3">{deal.investmentTotal}</td>
+                    <td className="px-4 py-3">{deal.distributionTotal}</td>
+                    <td className="px-4 py-3">{deal.action}</td>
+                  </tr>
+                ))}
 
               {!isLoadingDeals && !dealsError && joinedDeals.length === 0 && (
                 <tr>
-                  <td
-                    className="px-4 py-4 text-sm text-gray-500"
-                    colSpan={8}
-                  >
+                  <td className="px-4 py-4 text-sm text-gray-500" colSpan={8}>
                     No deals available yet.
+                  </td>
+                </tr>
+              )}
+
+              {!isLoadingDeals && dealsError && (
+                <tr>
+                  <td className="px-4 py-4 text-sm text-gray-500" colSpan={8}>
+                    Unable to display deals.
                   </td>
                 </tr>
               )}
@@ -171,14 +169,10 @@ export default function Deals() {
       {/* In-progress Investments Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-800">
-            In-progress investments
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-800">In-progress investments</h2>
+
           <div className="relative w-64">
-            <Search
-              size={16}
-              className="absolute left-3 top-2.5 text-gray-400"
-            />
+            <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
             <input
               type="text"
               placeholder="Search investments..."
@@ -202,13 +196,38 @@ export default function Deals() {
                 <th className="px-4 py-3 text-left">Actions</th>
               </tr>
             </thead>
+
             <tbody>
+              {inProgress
+                .filter((inv) => {
+                  const search = investmentsSearch.trim().toLowerCase();
+                  if (!search) return true;
+                  return (
+                    (inv.offeringName || "").toLowerCase().includes(search) ||
+                    (inv.sponsors || "").toLowerCase().includes(search)
+                  );
+                })
+                .map((inv, i) => (
+                  <tr key={i} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-3 text-blue-600 font-medium hover:underline cursor-pointer">
+                      {inv.offeringName}
+                    </td>
+                    <td className="px-4 py-3">{inv.sponsors}</td>
+                    <td className="px-4 py-3">{inv.amount}</td>
+                    <td className="px-4 py-3">{inv.class}</td>
+                    <td className="px-4 py-3">{inv.profile}</td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-700">
+                        {inv.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-blue-600">{inv.action}</td>
+                  </tr>
+                ))}
+
               {inProgress.length === 0 && (
                 <tr>
-                  <td
-                    className="px-4 py-4 text-sm text-gray-500"
-                    colSpan={7}
-                  >
+                  <td className="px-4 py-4 text-sm text-gray-500" colSpan={7}>
                     No in-progress investments yet.
                   </td>
                 </tr>

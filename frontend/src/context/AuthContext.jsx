@@ -12,7 +12,22 @@ export const AuthProvider = ({ children }) => {
   // NEW: store role from JWT
   const [role, setRole] = useState(null);
 
+  // ✅ NEW: auth hydration/loading flag
+  const [isLoading, setIsLoading] = useState(true);
+
   const isAuthenticated = !!token;
+
+  // ---------------------------------------------------------
+  // INITIAL HYDRATE TOKEN FROM SESSION STORAGE (ONCE)
+  // ---------------------------------------------------------
+  useEffect(() => {
+    const stored = sessionStorage.getItem("token");
+    if (stored && !token) {
+      setToken(stored);
+    }
+    setIsLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---------------------------------------------------------
   // SAVE JWT INTO SESSION STORAGE
@@ -58,8 +73,10 @@ export const AuthProvider = ({ children }) => {
 
       try {
         const res = await axiosClient.get("/api/profiles/me");
-        setUser(res.data); // This is your profile data
+        setUser(res.data);
       } catch (err) {
+        // ✅ IMPORTANT: do NOT log user out here.
+        // If profile fails due to backend issue, keep token and allow app to run.
         console.log("Profile load failed or token expired.");
       }
     };
@@ -97,7 +114,6 @@ export const AuthProvider = ({ children }) => {
     const jwt = res.data?.access_token;
     if (jwt) {
       loginWithToken(jwt);
-      // role will auto-update because of the decode hook
     }
 
     return jwt;
@@ -116,9 +132,10 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         token,
-        user,             // profile info from backend
-        role,             // decoded from JWT ("Admin" / "User")
+        user,
+        role,
         isAuthenticated,
+        isLoading, // ✅ NEW
         loginWithToken,
         logout,
 
